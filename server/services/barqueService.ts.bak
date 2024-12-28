@@ -1,0 +1,110 @@
+import { Barque } from '../../app/types/barque';
+
+class BarqueService {
+  private barquesChunks: Barque[][] = [];
+  private readonly CHUNK_SIZE = 100;
+
+  constructor() {
+    this.initializeWithSampleData();
+  }
+
+  private initializeWithSampleData() {
+    const initialBarques: Barque[] = [
+      {
+        id: 1,
+        affiliation: "Marine Nationale",
+        immatriculation: "MN001",
+        nom: "Vigilant",
+        portAttache: "Brest",
+        statut: "En_Attente",
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      }
+    ];
+    this.addBarquesInChunks(initialBarques);
+  }
+
+  private addBarquesInChunks(newBarques: Barque[]) {
+    this.barquesChunks = [];
+    for (let i = 0; i < newBarques.length; i += this.CHUNK_SIZE) {
+      this.barquesChunks.push(newBarques.slice(i, i + this.CHUNK_SIZE));
+    }
+  }
+
+  async getBarques(page: number, limit: number) {
+    const startIdx = (page - 1) * limit;
+    const allBarques = this.barquesChunks.flat();
+    const totalItems = allBarques.length;
+    const totalPages = Math.ceil(totalItems / limit);
+    
+    const items = allBarques.slice(startIdx, startIdx + limit);
+    
+    return {
+      items,
+      page,
+      totalPages,
+      totalItems,
+      hasMore: page < totalPages
+    };
+  }
+
+  async createBarque(barque: Barque) {
+    const allBarques = this.barquesChunks.flat();
+    const maxId = Math.max(0, ...allBarques.map(b => b.id));
+    const newBarque = {
+      ...barque,
+      id: maxId + 1,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    };
+    
+    this.addBarquesInChunks([...allBarques, newBarque]);
+    return newBarque;
+  }
+
+  async bulkImport(barques: Barque[]) {
+    const allBarques = this.barquesChunks.flat();
+    const maxId = Math.max(0, ...allBarques.map(b => b.id));
+    
+    const newBarques = barques.map((barque, index) => ({
+      ...barque,
+      id: maxId + index + 1,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    }));
+    
+    this.addBarquesInChunks([...allBarques, ...newBarques]);
+  }
+
+  async deleteBarque(id: number) {
+    for (let i = 0; i < this.barquesChunks.length; i++) {
+      const index = this.barquesChunks[i].findIndex(b => b.id === id);
+      if (index !== -1) {
+        this.barquesChunks[i] = this.barquesChunks[i].filter(b => b.id !== id);
+        if (this.barquesChunks[i].length === 0) {
+          this.barquesChunks.splice(i, 1);
+        }
+        return;
+      }
+    }
+    throw new Error('Barque not found');
+  }
+
+  async updateBarque(id: number, data: Partial<Barque>) {
+    for (let i = 0; i < this.barquesChunks.length; i++) {
+      const index = this.barquesChunks[i].findIndex(b => b.id === id);
+      if (index !== -1) {
+        const updatedBarque = {
+          ...this.barquesChunks[i][index],
+          ...data,
+          updatedAt: new Date().toISOString()
+        };
+        this.barquesChunks[i][index] = updatedBarque;
+        return updatedBarque;
+      }
+    }
+    throw new Error('Barque not found');
+  }
+}
+
+export const barqueService = new BarqueService();
